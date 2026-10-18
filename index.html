@@ -44,8 +44,15 @@
         <h2>迷路の大きさ</h2>
         <div class="field"><div class="top"><label for="cols">横のマス数</label><output id="colsOut"></output></div>
           <input type="range" id="cols" min="24" max="240" step="2" value="64"></div>
-        <div class="field"><div class="top"><label for="margin">絵のまわりの余白</label><output id="marginOut"></output></div>
-          <input type="range" id="margin" min="1" max="10" value="2"></div>
+        <div class="field"><div class="top"><label for="mTop">余白（上）</label><output id="mTopOut"></output></div>
+          <input type="range" id="mTop" min="1" max="10" value="2"></div>
+        <div class="field"><div class="top"><label for="mBottom">余白（下）</label><output id="mBottomOut"></output></div>
+          <input type="range" id="mBottom" min="1" max="10" value="2"></div>
+        <div class="field"><div class="top"><label for="mLeft">余白（左）</label><output id="mLeftOut"></output></div>
+          <input type="range" id="mLeft" min="1" max="10" value="2"></div>
+        <div class="field"><div class="top"><label for="mRight">余白（右）</label><output id="mRightOut"></output></div>
+          <input type="range" id="mRight" min="1" max="10" value="2"></div>
+        <label class="check"><input type="checkbox" id="mLink" checked>上下左右をそろえる</label>
       </div>
 
       <div class="group">

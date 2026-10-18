@@ -3,23 +3,25 @@ import { generateMaze, buildSVG } from "./maze-core.js";
 /* ---------- UI ---------- */
 const $=id=>document.getElementById(id);
 let src=null, maze=null, lastInk=null, dl=null, timer=0;
-const ids=["thr","inv","cols","margin","branch","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
+const margins=["mTop","mBottom","mLeft","mRight"];
+const ids=["thr","inv","cols",...margins,"mLink","branch","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
 
-function readOpts(){return{thr:+$("thr").value,inv:$("inv").checked,cols:+$("cols").value,margin:+$("margin").value,
+function readOpts(){return{thr:+$("thr").value,inv:$("inv").checked,cols:+$("cols").value,
+  mt:+$("mTop").value,mb:+$("mBottom").value,ml:+$("mLeft").value,mr:+$("mRight").value,
   branch:+$("branch").value/100,start:$("start").value,goal:$("goal").value,seed:Math.max(0,parseInt($("seed").value)||0),
   cell:Math.max(.1,parseFloat($("cellmm").value)||3),line:Math.max(.01,parseFloat($("linemm").value)||.3),
   fill:$("fill").value,fadeAux:$("fadeAux").checked,routeLine:$("routeLine").checked};}
 
 function sampleInk(o){
-  const bw=o.cols/2, iw=bw-2*o.margin; if(iw<3) throw new Error("余白が大きすぎます。横のマス数を増やすか余白を減らしてください。");
-  const ih=Math.max(2,Math.round(iw*src.height/src.width)), bh=ih+2*o.margin;
+  const bw=o.cols/2, iw=bw-o.ml-o.mr; if(iw<3) throw new Error("余白が大きすぎます。横のマス数を増やすか余白を減らしてください。");
+  const ih=Math.max(2,Math.round(iw*src.height/src.width)), bh=ih+o.mt+o.mb;
   const S=4, c=document.createElement("canvas"); c.width=iw*S; c.height=ih*S;
   const x=c.getContext("2d",{willReadFrequently:true}); x.fillStyle="#fff"; x.fillRect(0,0,c.width,c.height);
   x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high"; x.drawImage(src,0,0,c.width,c.height);
   const px=x.getImageData(0,0,c.width,c.height).data; const ink=new Uint8Array(bw*bh);
   for(let by=0;by<ih;by++)for(let bx=0;bx<iw;bx++){let s=0;
     for(let yy=0;yy<S;yy++)for(let xx=0;xx<S;xx++){const i=((by*S+yy)*c.width+bx*S+xx)*4; s+=.299*px[i]+.587*px[i+1]+.114*px[i+2];}
-    let dark=s/(S*S)<o.thr; if(o.inv)dark=!dark; ink[(by+o.margin)*bw+bx+o.margin]=dark?1:0;}
+    let dark=s/(S*S)<o.thr; if(o.inv)dark=!dark; ink[(by+o.mt)*bw+bx+o.ml]=dark?1:0;}
   return {ink,bw,bh};
 }
 
@@ -33,12 +35,13 @@ function drawPreview(m){
 
 function render(){
   const o=readOpts();
-  $("thrOut").textContent=o.thr; $("colsOut").textContent=o.cols+" マス"; $("marginOut").textContent=o.margin*2+" マス";
+  $("thrOut").textContent=o.thr; $("colsOut").textContent=o.cols+" マス";
+  for(const id of margins) $(id+"Out").textContent=$(id).value*2+" マス";
   $("branchOut").textContent=Math.round(o.branch*100);
   if(!src) return;
   const st=$("status");
   try{
-    const key=[o.thr,o.inv,o.cols,o.margin,o.branch,o.start,o.goal,o.seed].join();
+    const key=[o.thr,o.inv,o.cols,o.mt,o.mb,o.ml,o.mr,o.branch,o.start,o.goal,o.seed].join();
     if(!maze||maze.key!==key||maze.src!==src){
       const {ink,bw,bh}=sampleInk(o);
       const t0=performance.now();
@@ -59,6 +62,10 @@ function render(){
 }
 const schedule=()=>{clearTimeout(timer);timer=setTimeout(render,120);};
 ids.forEach(id=>{$(id).addEventListener("input",schedule);});
+// そろえる設定のときは、動かした余白の値を他の3辺にも写す
+const syncMargins=v=>{if($("mLink").checked) for(const id of margins) $(id).value=v;};
+margins.forEach(id=>$(id).addEventListener("input",()=>syncMargins($(id).value)));
+$("mLink").addEventListener("change",()=>syncMargins($("mTop").value));
 $("reroll").addEventListener("click",()=>{$("seed").value=(parseInt($("seed").value)||0)+1;render();});
 
 function loadImageFromBlob(blob){
