@@ -18,6 +18,12 @@ function placeMargins(o){
   return {ml:o.ml+ox,mr:o.mr-ox,mt:o.mt+oy,mb:o.mb-oy,ox,oy};
 }
 
+// ずらしスライダーの範囲を、いまの余白で実際に動かせる範囲に合わせる
+function fitOffsetRange(){
+  for(const [id,a,b] of [["offX","mLeft","mRight"],["offY","mTop","mBottom"]]){
+    const s=$(id); s.min=1-$(a).value; s.max=$(b).value-1; s.disabled=s.min===s.max;}
+}
+
 function sampleInk(o){
   const bw=o.cols/2, iw=bw-o.ml-o.mr; if(iw<3) throw new Error("余白が大きすぎます。横のマス数を増やすか余白を減らしてください。");
   const ih=Math.max(2,Math.round(iw*src.height/src.width)), bh=ih+o.mt+o.mb;
@@ -40,6 +46,7 @@ function drawPreview(m){
 }
 
 function render(){
+  fitOffsetRange();
   const o=readOpts();
   $("thrOut").textContent=o.thr; $("colsOut").textContent=o.cols+" マス";
   for(const id of margins) $(id+"Out").textContent=$(id).value*2+" マス";
