@@ -66,6 +66,11 @@
         <div class="field"><div class="top"><label for="branch">行き止まりの形</label><output id="branchOut"></output></div>
           <input type="range" id="branch" min="0" max="100" value="80"></div>
         <p class="hint">左ほど短い枝がたくさん、右ほど長く入り組みます。</p>
+        <div class="field"><div class="top"><label for="rough">絵の輪郭のでこぼこ</label><output id="roughOut"></output></div>
+          <input type="range" id="rough" min="0" max="100" value="0"></div>
+        <div class="field"><div class="top"><label for="wiggle">入口・出口までの通路のくねり</label><output id="wiggleOut"></output></div>
+          <input type="range" id="wiggle" min="0" max="100" value="0"></div>
+        <p class="hint">上げるほど、解いたときの絵が手描き風にくずれ、絵の外の正解ルートも回り道をします。</p>
         <div class="row">
           <label for="start">入口</label>
           <select id="start"><option value="tl" selected>左上</option><option value="tr">右上</option><option value="bl">左下</option><option value="br">右下</option><option value="top">上（近い所）</option><option value="bottom">下（近い所）</option><option value="left">左（近い所）</option><option value="right">右（近い所）</option></select>

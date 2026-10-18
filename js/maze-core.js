@@ -1,5 +1,26 @@
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 
+/* 絵の輪郭にでこぼこを足す。amount: 0〜1。ふちのブロックをランダムに足したり削ったりする
+   - 判定はすべて元の形で行い、変えたブロック同士は隣り合わせない（削りが奥へ進んで線が切れるのを防ぐ）
+   - 足すのは、まっすぐなふちの外側だけ（隣の線とくっつけない・外周1ブロックは通路用に空けておく）
+   - 削るのは、太さに余裕のあるふちだけ（細い線を途切れさせない） */
+export function roughenInk(inkIn, bw, bh, amount, seed){
+  if(!(amount>0)) return inkIn;
+  const rng=mulberry32((seed^0x9E3779B9)>>>0), ink=Uint8Array.from(inkIn), changed=new Uint8Array(bw*bh), p=amount*.8;
+  const at=(x,y)=>x>=0&&y>=0&&x<bw&&y<bh&&inkIn[y*bw+x]===1;
+  const around=(x,y)=>{let k=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++) if((dx||dy)&&at(x+dx,y+dy)) k++; return k;};
+  const nbrs=(x,y)=>[at(x-1,y),at(x+1,y),at(x,y-1),at(x,y+1)];
+  const near=(x,y)=>(x>0&&changed[y*bw+x-1])||(x<bw-1&&changed[y*bw+x+1])||(y>0&&changed[(y-1)*bw+x])||(y<bh-1&&changed[(y+1)*bw+x]);
+  const order=[...Array(bw*bh).keys()];
+  for(let i=order.length-1;i>0;i--){const j=(rng()*(i+1))|0;[order[i],order[j]]=[order[j],order[i]];}
+  for(const b of order){ if(rng()>=p) continue; const x=b%bw, y=(b/bw)|0; if(near(x,y)) continue;
+    const n=nbrs(x,y);
+    if(inkIn[b]){ if(around(x,y)>=5&&!n.every(Boolean)){ink[b]=0;changed[b]=1;} }
+    else if(x>0&&y>0&&x<bw-1&&y<bh-1&&n.some(Boolean)&&around(x,y)<=3){ink[b]=1;changed[b]=1;}
+  }
+  return ink;
+}
+
 /* ink: Uint8Array(bw*bh) 1 = 塗る部分（2x2マスのブロック単位） */
 export function generateMaze(inkIn, bw, bh, opt){
   const rng = mulberry32(opt.seed>>>0);
@@ -68,6 +89,31 @@ export function generateMaze(inkIn, bw, bh, opt){
     while(h<t){const c=bq[h++]; for(const n of shuffle(gridNbrs(c))) if(dist[n]<0&&!reg[n]&&!blocked[n]){dist[n]=dist[c]+1;par[n]=c;bq[t++]=n;}}
     return {dist,par};};
   const trace=(co,par)=>{const p=[];let k=co;while(k>=0){p.push(k);k=par[k];}return p;}; // 絵の外側 → 外周
+  // くねった通路: path[0] から外周まで、1マスおきの格子の上を穴掘り法（深さ優先）で進んで作り直す
+  // 格子の間に必ず1列すき間ができるので、通路が横に並んで塊になることはない
+  // くねりが小さいうちは、外周に近づく向き（dist が小さい向き）を選ぶことが多い
+  const meander=(path,side,blocked,dist)=>{ const amt=opt.wiggle||0; if(!(amt>0)||path.length<2) return path;
+    const t=path[0], ok=c=>!reg[c]&&!(blocked&&blocked[c]);
+    const steps=c=>{const x=c%W,y=(c/W)|0,r=[];
+      if(x>1)r.push(c-2); if(x<W-2)r.push(c+2); if(y>1)r.push(c-2*W); if(y<H-2)r.push(c+2*W);
+      return r.filter(n=>ok(n)&&ok((c+n)/2));};
+    // 格子の点から外周まで、あと1〜2マスで抜けられるか
+    const finish=c=>{ if(onSide(c,side)) return [];
+      for(const m of gridNbrs(c)) if(ok(m)&&onSide(m,side)) return [m];
+      for(const m of gridNbrs(c)) if(ok(m)) for(const k of gridNbrs(m)) if(k!==c&&ok(k)&&onSide(k,side)) return [m,k];
+      return null;};
+    const seen=new Uint8Array(N), par=new Int32Array(N).fill(-1), stack=[t]; seen[t]=1;
+    let end=-1, tail=null;
+    while(stack.length){const c=stack[stack.length-1], f=finish(c); if(f){end=c;tail=f;break;}
+      const ns=steps(c).filter(n=>!seen[n]); if(!ns.length){stack.pop();continue;}
+      let n=ns[0];
+      if(rng()<amt) n=ns[(rng()*ns.length)|0];
+      else for(const s of ns) if(dist[s]>=0&&(dist[n]<0||dist[s]<dist[n])) n=s;
+      seen[n]=1; par[n]=c; stack.push(n);}
+    if(end<0) return path;
+    const out=[]; for(let c=end;c!==t;c=par[c]) out.push(c,(c+par[c])/2);
+    out.push(t); out.reverse();
+    return out.concat(tail);};
   const xyPar=c=>((c%W)+((c/W)|0))&1;
   const SD=freeDist(opt.start,new Uint8Array(N));
   // 絵に入るマスの候補（マスの色＝市松の偶奇ごとに一番近いもの）
@@ -76,15 +122,20 @@ export function generateMaze(inkIn, bw, bh, opt){
       for(const n of gridNbrs(c)) if(!reg[n]&&SD.dist[n]>=0&&(SD.dist[n]<bd[pr]||(SD.dist[n]===bd[pr]&&rng()<.3))){bd[pr]=SD.dist[n];sCands[pr]={c,n,d:SD.dist[n]};}} }
   const ctxs=[];
   for(const sE of sCands.filter(Boolean).sort((x,y)=>x.d-y.d)){
-    const A=trace(sE.n,SD.par);
-    const blk=new Uint8Array(N); for(const k of A) blk[k]=1;
-    const GD=freeDist(opt.goal,blk);
-    const goodOut=c=>{let best=-1; for(const n of gridNbrs(c)) if(!reg[n]&&!blk[n]&&GD.dist[n]>=0&&(best<0||GD.dist[n]<GD.dist[best])) best=n; return best;};
-    const gBest=new Map();
-    for(let c=0;c<N;c++){ if(!reg[c]) continue; const o=goodOut(c); if(o<0) continue;
-      const b=blockOf(c); if(!gBest.has(b)||GD.dist[o]<gBest.get(b)) gBest.set(b,GD.dist[o]);}
-    const gCands=[...gBest.entries()].sort((x,y)=>x[1]-y[1]).slice(0,6).map(e=>e[0]);
-    if(gCands.length) ctxs.push({sE,A,GD,goodOut,gCands});
+    const straight=trace(sE.n,SD.par), wiggled=meander(straight,opt.start,null,SD.dist);
+    // くねらせた入口通路が出口側をふさいでしまったら、まっすぐな通路に戻す
+    for(const A of wiggled===straight?[straight]:[wiggled,straight]){
+      const blk=new Uint8Array(N); for(const k of A) blk[k]=1;
+      // くねらせた入口通路のときは、まわり1マスも避けて出口通路を並走させない
+      if(A!==straight) for(const k of A) for(const n of gridNbrs(k)) blk[n]=1;
+      const GD=freeDist(opt.goal,blk);
+      const goodOut=c=>{let best=-1; for(const n of gridNbrs(c)) if(!reg[n]&&!blk[n]&&GD.dist[n]>=0&&(best<0||GD.dist[n]<GD.dist[best])) best=n; return best;};
+      const gBest=new Map();
+      for(let c=0;c<N;c++){ if(!reg[c]) continue; const o=goodOut(c); if(o<0) continue;
+        const b=blockOf(c); if(!gBest.has(b)||GD.dist[o]<gBest.get(b)) gBest.set(b,GD.dist[o]);}
+      const gCands=[...gBest.entries()].sort((x,y)=>x[1]-y[1]).slice(0,6).map(e=>e[0]);
+      if(gCands.length){ctxs.push({sE,A,blk,GD,goodOut,gCands}); break;}
+    }
   }
   if(!ctxs.length) throw new Error("入口・出口までの通路を作れませんでした。余白を増やしてください。");
   const dirOf=(a,b)=> b===a+1?"right":b===a-1?"left":b===a+bw?"down":"up";
@@ -97,7 +148,7 @@ export function generateMaze(inkIn, bw, bh, opt){
   const tStart=Date.now();
   for(let attempt=0;attempt<16&&!result;attempt++){
     if(best&&Date.now()-tStart>2500) break;
-    const ctx=ctxs[attempt%ctxs.length]; const {sE,A,GD,goodOut,gCands}=ctx; const Sb=blockOf(sE.c);
+    const ctx=ctxs[attempt%ctxs.length]; const {sE,A,blk,GD,goodOut,gCands}=ctx; const Sb=blockOf(sE.c);
     const Gb=gCands[((attempt/ctxs.length)|0)%gCands.length];
     let spine;
     if(Gb===Sb) spine=[Sb];
@@ -173,7 +224,8 @@ export function generateMaze(inkIn, bw, bh, opt){
     const path=[]; for(let c=order[0];c>=0;c=nextC[c]) path.push(c);
     const dropped=[]; if(remaining>0) for(let c=0;c<N;c++) if(loopId[c]>=0&&!merged[loopId[c]]) dropped.push(c);
     if(path.length+dropped.length!==M) continue;
-    const cand={path,A,B:trace(gOut,GD.par),dropped};
+    const B=meander(trace(gOut,GD.par),opt.goal,blk,GD.dist);
+    const cand={path,A,B,dropped};
     if(!dropped.length) result=cand; else if(!best||dropped.length<best.dropped.length) best=cand;
   }
   // 一筆でつなげない細い部分が残ったときは、そこを塗らない部分として扱う

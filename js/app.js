@@ -1,14 +1,14 @@
-import { generateMaze, buildSVG } from "./maze-core.js";
+import { roughenInk, generateMaze, buildSVG } from "./maze-core.js";
 
 /* ---------- UI ---------- */
 const $=id=>document.getElementById(id);
 let src=null, maze=null, lastInk=null, dl=null, timer=0;
 const margins=["mTop","mBottom","mLeft","mRight"];
-const ids=["thr","inv","cols",...margins,"mLink","offX","offY","branch","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
+const ids=["thr","inv","cols",...margins,"mLink","offX","offY","branch","rough","wiggle","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
 
 function readOpts(){return{thr:+$("thr").value,inv:$("inv").checked,cols:+$("cols").value,
   mt:+$("mTop").value,mb:+$("mBottom").value,ml:+$("mLeft").value,mr:+$("mRight").value,ox:+$("offX").value,oy:+$("offY").value,
-  branch:+$("branch").value/100,start:$("start").value,goal:$("goal").value,seed:Math.max(0,parseInt($("seed").value)||0),
+  branch:+$("branch").value/100,rough:+$("rough").value/100,wiggle:+$("wiggle").value/100,start:$("start").value,goal:$("goal").value,seed:Math.max(0,parseInt($("seed").value)||0),
   cell:Math.max(.1,parseFloat($("cellmm").value)||3),line:Math.max(.01,parseFloat($("linemm").value)||.3),
   fill:$("fill").value,fadeAux:$("fadeAux").checked,routeLine:$("routeLine").checked};}
 
@@ -54,14 +54,15 @@ function render(){
   $("offXOut").textContent=o.ox?(o.ox>0?"右へ ":"左へ ")+Math.abs(o.ox)*2+" マス":"中央";
   $("offYOut").textContent=o.oy?(o.oy>0?"下へ ":"上へ ")+Math.abs(o.oy)*2+" マス":"中央";
   $("branchOut").textContent=Math.round(o.branch*100);
+  $("roughOut").textContent=Math.round(o.rough*100); $("wiggleOut").textContent=Math.round(o.wiggle*100);
   if(!src) return;
   const st=$("status");
   try{
-    const key=[o.thr,o.inv,o.cols,o.mt,o.mb,o.ml,o.mr,o.branch,o.start,o.goal,o.seed].join();
+    const key=[o.thr,o.inv,o.cols,o.mt,o.mb,o.ml,o.mr,o.branch,o.rough,o.wiggle,o.start,o.goal,o.seed].join();
     if(!maze||maze.key!==key||maze.src!==src){
       const {ink,bw,bh}=sampleInk(o);
       const t0=performance.now();
-      const m=generateMaze(ink,bw,bh,{seed:o.seed,branch:o.branch,start:o.start,goal:o.goal});
+      const m=generateMaze(roughenInk(ink,bw,bh,o.rough,o.seed),bw,bh,{seed:o.seed,branch:o.branch,wiggle:o.wiggle,start:o.start,goal:o.goal});
       m.key=key; m.src=src; m.ms=performance.now()-t0;
       m.onPath=new Uint8Array(m.W*m.H); for(const k of m.route) m.onPath[k]=1;
       maze=m; drawPreview(m);
