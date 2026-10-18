@@ -4,13 +4,19 @@ import { generateMaze, buildSVG } from "./maze-core.js";
 const $=id=>document.getElementById(id);
 let src=null, maze=null, lastInk=null, dl=null, timer=0;
 const margins=["mTop","mBottom","mLeft","mRight"];
-const ids=["thr","inv","cols",...margins,"mLink","branch","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
+const ids=["thr","inv","cols",...margins,"mLink","offX","offY","branch","start","goal","seed","cellmm","linemm","fill","fadeAux","routeLine"];
 
 function readOpts(){return{thr:+$("thr").value,inv:$("inv").checked,cols:+$("cols").value,
-  mt:+$("mTop").value,mb:+$("mBottom").value,ml:+$("mLeft").value,mr:+$("mRight").value,
+  mt:+$("mTop").value,mb:+$("mBottom").value,ml:+$("mLeft").value,mr:+$("mRight").value,ox:+$("offX").value,oy:+$("offY").value,
   branch:+$("branch").value/100,start:$("start").value,goal:$("goal").value,seed:Math.max(0,parseInt($("seed").value)||0),
   cell:Math.max(.1,parseFloat($("cellmm").value)||3),line:Math.max(.01,parseFloat($("linemm").value)||.3),
   fill:$("fill").value,fadeAux:$("fadeAux").checked,routeLine:$("routeLine").checked};}
+
+// ずらし量を余白の配分に反映する（合計は変えず、各辺は1ブロック以上残す）
+function placeMargins(o){
+  const ox=Math.max(1-o.ml,Math.min(o.mr-1,o.ox)), oy=Math.max(1-o.mt,Math.min(o.mb-1,o.oy));
+  return {ml:o.ml+ox,mr:o.mr-ox,mt:o.mt+oy,mb:o.mb-oy,ox,oy};
+}
 
 function sampleInk(o){
   const bw=o.cols/2, iw=bw-o.ml-o.mr; if(iw<3) throw new Error("余白が大きすぎます。横のマス数を増やすか余白を減らしてください。");
@@ -37,6 +43,9 @@ function render(){
   const o=readOpts();
   $("thrOut").textContent=o.thr; $("colsOut").textContent=o.cols+" マス";
   for(const id of margins) $(id+"Out").textContent=$(id).value*2+" マス";
+  Object.assign(o,placeMargins(o));
+  $("offXOut").textContent=o.ox?(o.ox>0?"右へ ":"左へ ")+Math.abs(o.ox)*2+" マス":"中央";
+  $("offYOut").textContent=o.oy?(o.oy>0?"下へ ":"上へ ")+Math.abs(o.oy)*2+" マス":"中央";
   $("branchOut").textContent=Math.round(o.branch*100);
   if(!src) return;
   const st=$("status");
@@ -66,6 +75,7 @@ ids.forEach(id=>{$(id).addEventListener("input",schedule);});
 const syncMargins=v=>{if($("mLink").checked) for(const id of margins) $(id).value=v;};
 margins.forEach(id=>$(id).addEventListener("input",()=>syncMargins($(id).value)));
 $("mLink").addEventListener("change",()=>syncMargins($("mTop").value));
+$("offReset").addEventListener("click",()=>{$("offX").value=0;$("offY").value=0;render();});
 $("reroll").addEventListener("click",()=>{$("seed").value=(parseInt($("seed").value)||0)+1;render();});
 
 function loadImageFromBlob(blob){
